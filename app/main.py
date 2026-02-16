@@ -111,8 +111,9 @@ async def search_records(
     
     # Apply search filter if query string provided
     if q:
-        # For SQLite, we'll filter in Python as JSON search is limited
-        # For PostgreSQL, you could use JSON operators
+        # Note: This in-memory filtering approach is suitable for small to medium datasets.
+        # For large datasets (>100k records), consider using PostgreSQL with JSON operators
+        # or implementing full-text search indexing.
         all_records = session.exec(query).all()
         filtered_records = []
         for record in all_records:
