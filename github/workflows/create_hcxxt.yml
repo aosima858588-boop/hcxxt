@@ -1,0 +1,415 @@
+---
+name: Create hcxxt files and PR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create_pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create hcxxt files
+        run: |
+          set -eux
+
+          # create directories
+          mkdir -p hcxxt/app/static
+
+          # README.md
+          cat > hcxxt/README.md <<'EOF'
+# hcxxt — 数据导入与在线查询 MVP (FastAPI + Docker)
+
+本项目为最小可用原型（MVP），提供：
+- 浏览器上传 CSV 并创建 dataset（每行保存为 JSON record）
+- 简单全文/模糊搜索（ILIKE/LIKE）
+- 极简前端：上传 / 列表 / 搜索
+- 可部署到 Render（或其它容器平台）
+
+快速步骤（假设仓库已存在并在本地）：
+1. 将本目录内容放入仓库下的 `hcxxt/` 子目录（本 PR 就是这样做的）。
+2. 创建新分支并提交（参见仓库根目录操作命令）。
+3. 在 Render 创建 Web Service（使用 Docker），并创建 Managed Postgres。把 Postgres 的连接字符串设为 `DATABASE_URL` 环境变量。
+4. 访问部署 URL，使用网页界面上传 CSV。
+
+API 简要：
+- POST /api/upload_csv  (form-data: name, file) — 上传 CSV 并创建 dataset
+- GET  /api/datasets  — 列出数据集
+- GET  /api/search?dataset_id=1&q=关键词&limit=50&offset=0 — 搜索
+- DELETE /api/datasets/{id} — 删除数据集
+
+注意：
+- 默认使用 `DATABASE_URL` 环境变量；若未设置则回退到本地 sqlite 文件 `hcxxt_data.db`（仅用于本地测试，不建议线上使用 sqlite）。
+- 若打算线上长期运行，推荐使用 Render 提供的 Postgres 或其它托管数据库。
+EOF
+
+          # .gitignore
+          cat > hcxxt/.gitignore <<'EOF'
+venv/
+__pycache__/
+*.pyc
+data.db
+.env
+*.sqlite3
+.DS_Store
+EOF
+
+          # .dockerignore
+          cat > hcxxt/.dockerignore <<'EOF'
+__pycache__
+*.pyc
+venv
+.git
+.env
+EOF
+
+          # requirements.txt
+          cat > hcxxt/requirements.txt <<'EOF'
+fastapi
+uvicorn[standard]
+sqlmodel
+pandas
+python-multipart
+aiofiles
+psycopg2-binary
+EOF
+
+          # Dockerfile
+          cat > hcxxt/Dockerfile <<'EOF'
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# system deps for psycopg2
+RUN apt-get update && apt-get install -y build-essential libpq-dev gcc --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . /app
+
+RUN python -m pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+# Use PORT env var provided by Render; default to 8000
+CMD ["sh", "-c", "uvicorn hcxxt.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+EOF
+
+          # ci.yml
+          mkdir -p hcxxt/.github/workflows
+          cat > hcxxt/.github/workflows/ci.yml <<'EOF'
+name: CI - Build (optional)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: ghcr.io/${{ github.repository }}:hcxxt-latest
+
+# Note: Render will build Dockerfile directly on deploy. This workflow is optional.
+EOF
+
+          # __init__.py
+          cat > hcxxt/app/__init__.py <<'EOF'
+# package marker for hcxxt.app
+EOF
+
+          # database.py
+          cat > hcxxt/app/database.py <<'EOF'
+import os
+from sqlmodel import create_engine, SQLModel
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./hcxxt_data.db")
+
+# For SQLite, disable same_thread check
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(DATABASE_URL, echo=False, connect_args=connect_args)
+
+def init_db():
+    SQLModel.metadata.create_all(engine)
+EOF
+
+          # models.py
+          cat > hcxxt/app/models.py <<'EOF'
+from typing import Optional, Dict, Any
+from datetime import datetime
+from sqlmodel import SQLModel, Field
+from sqlalchemy import Column
+try:
+    # prefer Postgres JSONB if available
+    from sqlalchemy.dialects.postgresql import JSONB as _JSON_TYPE
+except Exception:
+    from sqlalchemy.types import JSON as _JSON_TYPE
+
+class Dataset(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    columns: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(_JSON_TYPE))
+
+class Record(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    dataset_id: int = Field(index=True)
+    data: Dict[str, Any] = Field(sa_column=Column(_JSON_TYPE))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+EOF
+
+          # main.py
+          cat > hcxxt/app/main.py <<'EOF'
+import os
+import json
+from io import BytesIO
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session, select, text
+from .database import engine, init_db
+from .models import Dataset, Record
+import pandas as pd
+from fastapi.encoders import jsonable_encoder
+
+app = FastAPI(title="hcxxt - Data Import & Query")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# static frontend
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+init_db()
+
+@app.get("/", include_in_schema=False)
+def root():
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    return {"msg": "hcxxt running"}
+
+@app.post("/api/upload_csv")
+async def upload_csv(name: str = Form(...), file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="仅支持 CSV 文件")
+    content = await file.read()
+    try:
+        df = pd.read_csv(BytesIO(content))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"CSV 解析错误: {e}")
+
+    columns = list(df.columns)
+    with Session(engine) as session:
+        ds = Dataset(name=name, columns={"columns": columns})
+        session.add(ds)
+        session.commit()
+        session.refresh(ds)
+
+        # bulk insert (loop for MVP)
+        inserted = 0
+        for _, row in df.iterrows():
+            data = row.to_dict()
+            rec = Record(dataset_id=ds.id, data=data)
+            session.add(rec)
+            inserted += 1
+        session.commit()
+
+    return {"dataset_id": ds.id, "rows": inserted, "columns": columns}
+
+@app.get("/api/datasets")
+def list_datasets():
+    with Session(engine) as session:
+        ds_list = session.exec(select(Dataset)).all()
+        out = []
+        for d in ds_list:
+            # count rows
+            res = session.exec(text("SELECT COUNT(*) FROM record WHERE dataset_id = :did"), {"did": d.id}).one()
+            count = int(res[0]) if isinstance(res, (list, tuple)) else int(res)
+            out.append({
+                "id": d.id,
+                "name": d.name,
+                "created_at": d.created_at,
+                "columns": d.columns,
+                "rows": count
+            })
+        return out
+
+@app.get("/api/search")
+def search(dataset_id: int, q: Optional[str] = None, limit: int = 50, offset: int = 0):
+    with Session(engine) as session:
+        if q:
+            like_q = f"%{q}%"
+            try:
+                backend = engine.url.get_backend_name()
+            except Exception:
+                backend = str(engine.url)
+
+            if "postgres" in backend or "postgresql" in backend:
+                sql = text("SELECT id, data FROM record WHERE dataset_id = :did AND data::text ILIKE :like_q LIMIT :lim OFFSET :off")
+            else:
+                sql = text("SELECT id, data FROM record WHERE dataset_id = :did AND CAST(data AS TEXT) LIKE :like_q LIMIT :lim OFFSET :off")
+
+            rows = session.exec(sql, {"did": dataset_id, "like_q": like_q, "lim": limit, "off": offset}).all()
+            results = []
+            for r in rows:
+                rid = r[0]
+                data = r[1]
+                results.append({"id": rid, "data": jsonable_encoder(data)})
+            return {"count": len(results), "results": results}
+        else:
+            sql = text("SELECT id, data FROM record WHERE dataset_id = :did LIMIT :lim OFFSET :off")
+            rows = session.exec(sql, {"did": dataset_id, "lim": limit, "off": offset}).all()
+            results = []
+            for r in rows:
+                rid = r[0]
+                data = r[1]
+                results.append({"id": rid, "data": jsonable_encoder(data)})
+            return {"count": len(results), "results": results}
+
+@app.delete("/api/datasets/{dataset_id}")
+def delete_dataset(dataset_id: int):
+    with Session(engine) as session:
+        ds = session.get(Dataset, dataset_id)
+        if not ds:
+            raise HTTPException(status_code=404, detail="dataset not found")
+        session.exec(text("DELETE FROM record WHERE dataset_id = :did"), {"did": dataset_id})
+        session.delete(ds)
+        session.commit()
+        return {"detail": "deleted"}
+EOF
+
+          # static index.html
+          cat > hcxxt/app/static/index.html <<'EOF'
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>hcxxt - 数据导入与查询</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto; }
+    input, button { padding: 0.5rem; margin: 0.2rem 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>hcxxt</h1>
+  <section>
+    <h2>上传 CSV</h2>
+    <form id="uploadForm">
+      名称: <input type="text" id="dsName" value="mydataset" required />
+      文件: <input type="file" id="csvFile" accept=".csv" required />
+      <button type="submit">上传</button>
+    </form>
+    <div id="uploadResult"></div>
+  </section>
+
+  <section>
+    <h2>已有数据集</h2>
+    <button id="refresh">刷新列表</button>
+    <div id="datasets"></div>
+  </section>
+
+  <section>
+    <h2>搜索</h2>
+    dataset_id: <input id="searchDataset" type="number" value="1" />
+    关键词: <input id="searchQ" />
+    <button id="searchBtn">搜索</button>
+    <div id="searchResults"></div>
+  </section>
+
+<script>
+const api = (path) => window.location.origin + '/api' + path;
+
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('dsName').value;
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) return alert('请选择文件');
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('file', file);
+  const res = await fetch(api('/upload_csv'), { method: 'POST', body: fd });
+  const data = await res.json();
+  document.getElementById('uploadResult').innerText = JSON.stringify(data);
+  refreshDatasets();
+});
+
+async function refreshDatasets() {
+  const res = await fetch(api('/datasets'));
+  const ds = await res.json();
+  const el = document.getElementById('datasets');
+  if (!ds.length) { el.innerText = '没有数据集'; return; }
+  let html = '<table><tr><th>id</th><th>name</th><th>rows</th><th>columns</th><th>操作</th></tr>';
+  ds.forEach(d => {
+    html += `<tr>
+      <td>${d.id}</td>
+      <td>${d.name}</td>
+      <td>${d.rows}</td>
+      <td>${JSON.stringify(d.columns)}</td>
+      <td><button onclick="deleteDs(${d.id})">删除</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function deleteDs(id) {
+  if (!confirm('确定删除吗？')) return;
+  const res = await fetch(api('/datasets/' + id), { method: 'DELETE' });
+  const j = await res.json();
+  alert(JSON.stringify(j));
+  refreshDatasets();
+}
+
+document.getElementById('refresh').addEventListener('click', refreshDatasets);
+document.getElementById('searchBtn').addEventListener('click', async () => {
+  const did = document.getElementById('searchDataset').value;
+  const q = document.getElementById('searchQ').value;
+  const res = await fetch(api(`/search?dataset_id=${did}&q=${encodeURIComponent(q)}`));
+  const j = await res.json();
+  document.getElementById('searchResults').innerText = JSON.stringify(j, null, 2);
+});
+
+// initial
+refreshDatasets();
+</script>
+</body>
+</html>
+EOF
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: add/data-query-mvp
+          title: Add data import & query MVP (FastAPI + Docker + Render guide)
+          body: Adds a minimal FastAPI-based CSV import and search MVP under the hcxxt/ directory, Dockerfile and Render deployment instructions in README.
+          base: main
