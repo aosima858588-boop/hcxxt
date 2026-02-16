@@ -1,0 +1,26 @@
+[
+  {
+    "product_id": "P001",
+    "product_name": "笔记本电脑",
+    "price": "5999",
+    "stock": "50"
+  },
+  {
+    "product_id": "P002",
+    "product_name": "鼠标",
+    "price": "99",
+    "stock": "200"
+  },
+  {
+    "product_id": "P003",
+    "product_name": "键盘",
+    "price": "299",
+    "stock": "150"
+  },
+  {
+    "product_id": "P004",
+    "product_name": "显示器",
+    "price": "1999",
+    "stock": "80"
+  }
+]
