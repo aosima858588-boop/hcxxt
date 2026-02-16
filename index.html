@@ -6,45 +6,60 @@
   <title>查询页面</title>
   <style>
     :root{
-      --bg:#f5f7fb;
-      --card:#ffffff;
-      --primary:#2b6cb0;
-      --muted:#6b7280;
-      --danger:#e53e3e;
-      --radius:10px;
-      --shadow: 0 6px 20px rgba(27,40,56,0.08);
+      --bg: #f6f9ff;
+      --card: #ffffff;
+      --primary: #2563eb;
+      --muted: #6b7280;
+      --danger: #ef4444;
+      --radius: 12px;
+      --shadow: 0 8px 30px rgba(16,24,40,0.06);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Noto Sans Mono", monospace;
     }
+
     html,body{
       height:100%;
       margin:0;
       font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
-      background:linear-gradient(180deg,var(--bg),#eef4fb);
-      color:#102a43;
+      background: linear-gradient(180deg, var(--bg), #eef5ff);
+      color: #0f1724;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
     }
+
     .wrap{
       min-height:100%;
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:40px 16px;
+      padding:32px;
       box-sizing:border-box;
     }
+
     .card{
       width:100%;
-      max-width:760px;
+      max-width:780px;
       background:var(--card);
       border-radius:var(--radius);
       box-shadow:var(--shadow);
-      padding:28px;
+      padding:24px;
       box-sizing:border-box;
     }
+
+    header{
+      display:flex;
+      align-items:baseline;
+      gap:12px;
+      margin-bottom:14px;
+    }
+
     h1{
-      margin:0 0 8px 0;
-      font-size:20px;
+      margin:0;
+      font-size:18px;
       letter-spacing:0.2px;
     }
+
     p.lead{
-      margin:0 0 18px 0;
+      margin:0;
       color:var(--muted);
       font-size:13px;
     }
@@ -52,65 +67,88 @@
     .controls{
       display:flex;
       gap:12px;
-      margin-bottom:16px;
+      margin-top:16px;
       align-items:center;
     }
-    .controls .input{
+
+    .controls .input-wrap{
       flex:1;
       display:flex;
-      gap:8px;
-      align-items:center;
     }
+
     input[type="text"]{
       width:100%;
       padding:12px 14px;
-      border-radius:8px;
+      border-radius:10px;
       border:1px solid #e6eef8;
       background:linear-gradient(180deg,#fff,#fbfdff);
-      box-shadow:inset 0 1px 0 rgba(16,42,67,0.02);
       font-size:14px;
       outline:none;
-      transition:box-shadow 0.12s, border-color 0.12s;
+      transition:border-color .12s, box-shadow .12s;
     }
+
     input[type="text"]:focus{
-      border-color: rgba(43,108,176,0.9);
-      box-shadow:0 4px 18px rgba(43,108,176,0.08);
+      border-color: rgba(37,99,235,0.85);
+      box-shadow: 0 6px 18px rgba(37,99,235,0.06);
     }
-    button{
+
+    button.btn{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
       background:var(--primary);
       color:#fff;
       border:none;
       padding:10px 14px;
       font-size:14px;
-      border-radius:8px;
+      border-radius:10px;
       cursor:pointer;
-      transition:transform .08s ease, opacity .08s;
+      transition:transform .08s ease, opacity .12s;
     }
-    button:active{ transform:translateY(1px); }
-    button[disabled]{ opacity:0.6; cursor:default; }
+
+    button.btn:active{ transform: translateY(1px); }
+    button.btn[disabled]{ opacity:0.6; cursor:default; }
+
+    .spinner{
+      width:16px;
+      height:16px;
+      border-radius:50%;
+      border:2px solid rgba(255,255,255,0.25);
+      border-top-color: rgba(255,255,255,0.9);
+      animation: spin 0.9s linear infinite;
+      display:inline-block;
+    }
+
+    @keyframes spin{
+      to { transform: rotate(360deg); }
+    }
 
     .info-row{
       display:flex;
       gap:12px;
       align-items:center;
-      margin-bottom:12px;
-      font-size:13px;
+      margin-top:12px;
       color:var(--muted);
+      font-size:13px;
     }
 
     .result{
-      margin-top:8px;
-      background:#0f1724;
+      margin-top:16px;
+      background:#0b1220;
       color:#e6eef8;
-      padding:16px;
-      border-radius:8px;
-      font-family: "SFMono-Regular", Menlo, Monaco, "Roboto Mono", "Noto Sans Mono", monospace;
+      padding:14px;
+      border-radius:10px;
+      font-family: var(--mono);
       font-size:13px;
-      line-height:1.4;
-      max-height:380px;
+      line-height:1.45;
+      max-height:420px;
       overflow:auto;
       white-space:pre-wrap;
       word-break:break-word;
+    }
+
+    .result .empty {
+      color:#94a3b8;
     }
 
     .error{
@@ -118,139 +156,185 @@
       font-weight:600;
     }
 
-    .muted{
-      color:var(--muted);
-      font-size:13px;
+    ul.simple{
+      margin:0;
+      padding-left:18px;
     }
 
-    @media (max-width:520px){
+    @media (max-width:560px){
       .controls{ flex-direction:column; align-items:stretch; }
-      button{ width:100%; }
+      button.btn{ width:100%; justify-content:center; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card" role="main" aria-labelledby="title">
-      <h1 id="title">查询接口</h1>
-      <p class="lead">在下面输入查询文本，点击“查询”来调用后端接口并显示结果。</p>
-
-      <div class="controls">
-        <div class="input">
-          <input id="queryInput" type="text" placeholder="请输入查询内容（例如：你好）" aria-label="查询文本" />
+      <header>
+        <div>
+          <h1 id="title">查询接口</h1>
+          <p class="lead">请输入查询内容，点击 “查询”（请求：POST http://localhost:5000/query）</p>
         </div>
-        <button id="queryBtn">查询</button>
+      </header>
+
+      <div class="controls" aria-hidden="false">
+        <div class="input-wrap">
+          <input id="queryInput" type="text" placeholder="请输入查询文本（例如：查找关键词）" aria-label="查询文本" />
+        </div>
+        <button id="queryBtn" class="btn" type="button" aria-label="查询按钮">
+          <span id="btnIcon" aria-hidden="true">查询</span>
+        </button>
       </div>
 
-      <div class="info-row">
-        <div class="muted">POST 地址： http://localhost:5000/query &nbsp; Body: {"query":"..."} </div>
+      <div class="info-row" aria-live="polite">
+        <div class="muted">请求地址：<code>http://localhost:5000/query</code> &nbsp; Body: <code>{"query":"..."}</code></div>
         <div style="flex:1"></div>
-        <div id="status" class="muted" aria-live="polite"></div>
+        <div id="status" class="muted" aria-hidden="false"></div>
       </div>
 
-      <div id="result" class="result" aria-live="polite">等待查询...</div>
+      <div id="result" class="result" aria-live="polite">
+        <span class="empty">结果将在这里显示。</span>
+      </div>
     </div>
   </div>
 
   <script>
-    (function(){
+    (function () {
+      const ENDPOINT = 'http://localhost:5000/query';
       const input = document.getElementById('queryInput');
       const btn = document.getElementById('queryBtn');
-      const resultEl = document.getElementById('result');
+      const btnIcon = document.getElementById('btnIcon');
       const statusEl = document.getElementById('status');
+      const resultEl = document.getElementById('result');
 
-      const ENDPOINT = 'http://localhost:5000/query'; // 指定后端地址
+      let loading = false;
 
-      function setStatus(text){
-        statusEl.textContent = text || '';
-      }
-
-      function renderResult(data){
-        try{
-          const pretty = JSON.stringify(data, null, 2);
-          resultEl.textContent = pretty;
-        }catch(e){
-          resultEl.textContent = String(data);
+      function setLoading(on) {
+        loading = !!on;
+        btn.disabled = loading;
+        if (loading) {
+          btnIcon.innerHTML = '<span class="spinner" aria-hidden="true"></span> 查询中';
+          statusEl.textContent = '查询中...';
+        } else {
+          btnIcon.textContent = '查询';
+          statusEl.textContent = '';
         }
       }
 
-      function renderError(msg){
-        resultEl.innerHTML = '<span class="error">错误：</span> ' + escapeHtml(msg);
+      function renderError(message) {
+        const safe = escapeHtml(String(message || '发生错误'));
+        resultEl.innerHTML = '<div class="error">错误：' + safe + '</div>';
       }
 
-      function escapeHtml(s){
-        return String(s)
-          .replace(/&/g,'&amp;')
-          .replace(/</g,'&lt;')
-          .replace(/>/g,'&gt;')
-          .replace(/"/g,'&quot;')
-          .replace(/'/g,'&#39;');
+      function renderResultsFromPayload(payload) {
+        // 假设后端返回 {"results": [...]}，优先展示 results 数组
+        if (payload && typeof payload === 'object' && Array.isArray(payload.results)) {
+          const arr = payload.results;
+          if (arr.length === 0) {
+            resultEl.innerHTML = '<div class="empty">未找到结果（results 数组为空）</div>';
+            return;
+          }
+          // 构建简洁的列表视图 + 完整 JSON 展示按钮
+          const list = document.createElement('ul');
+          list.className = 'simple';
+          for (const item of arr) {
+            const li = document.createElement('li');
+            // 尝试显示简单文本，否则 JSON.stringify
+            if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+              li.textContent = String(item);
+            } else {
+              li.textContent = JSON.stringify(item);
+            }
+            list.appendChild(li);
+          }
+          // Replace result content
+          resultEl.innerHTML = '';
+          resultEl.appendChild(list);
+
+          // Also add a collapsible pretty-JSON area for the full payload
+          const pre = document.createElement('pre');
+          pre.style.marginTop = '12px';
+          pre.style.background = 'rgba(255,255,255,0.02)';
+          pre.style.padding = '10px';
+          pre.style.borderRadius = '8px';
+          pre.textContent = JSON.stringify(payload, null, 2);
+          resultEl.appendChild(pre);
+        } else {
+          // Fallback: render whole payload prettified
+          resultEl.textContent = JSON.stringify(payload, null, 2);
+        }
       }
 
-      async function doQuery(){
+      function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+      }
+
+      async function doQuery() {
         const q = input.value.trim();
-        if(!q){
+        if (!q) {
           renderError('查询内容不能为空');
           return;
         }
 
-        btn.disabled = true;
-        setStatus('查询中...');
-        resultEl.textContent = ''; // 清空显示区
+        setLoading(true);
+        resultEl.innerHTML = ''; // 清空结果区
 
-        try{
+        try {
           const resp = await fetch(ENDPOINT, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
-            // 将输入放入 JSON body 中
             body: JSON.stringify({ query: q })
           });
 
-          const ct = resp.headers.get('content-type') || '';
+          const contentType = resp.headers.get('content-type') || '';
           let payload;
-          if (ct.includes('application/json')) {
+          if (contentType.includes('application/json')) {
             payload = await resp.json();
           } else {
-            payload = await resp.text();
+            // 非 JSON 响应，获取文本并抛出为错误
+            const text = await resp.text();
+            if (!resp.ok) {
+              throw new Error(text || ('HTTP ' + resp.status));
+            } else {
+              // 成功但非 JSON，显示原始文本
+              resultEl.textContent = text;
+              return;
+            }
           }
 
           if (!resp.ok) {
-            // 非 2xx，尽量显示后端返回的错误信息
-            if (typeof payload === 'object' && payload !== null) {
-              const msg = payload.error || payload.detail || JSON.stringify(payload);
-              renderError(msg);
-            } else {
-              renderError(payload || ('HTTP ' + resp.status));
-            }
-            setStatus('错误');
-          } else {
-            renderResult(payload);
-            setStatus('完成');
+            // 后端返回 JSON 错误信息，尝试展示 error/detail 字段
+            const msg = payload && (payload.error || payload.detail || JSON.stringify(payload));
+            throw new Error(msg || ('HTTP ' + resp.status));
           }
+
+          // 成功：展示 payload.results（优先）或完整 JSON
+          renderResultsFromPayload(payload);
         } catch (err) {
-          // 网络错误或跨域问题等
-          renderError('网络或服务器错误：' + (err && err.message ? err.message : String(err)));
-          setStatus('网络错误');
+          // 捕获网络/解析/后端错误
+          renderError(err && err.message ? err.message : String(err));
         } finally {
-          btn.disabled = false;
-          setTimeout(()=>setStatus(''), 2500);
+          setLoading(false);
         }
       }
 
+      // 绑定事件
       btn.addEventListener('click', doQuery);
-
-      // 回车触发查询
-      input.addEventListener('keydown', function(e){
-        if(e.key === 'Enter'){
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
           doQuery();
         }
       });
 
-      // 页面加载时的提示
+      // 初始提示
+      resultEl.innerHTML = '<span class="empty">请输入查询内容并点击“查询”按钮。</span>';
       input.focus();
-      resultEl.textContent = '请输入查询内容并点击上方“查询”按钮。';
     })();
   </script>
 </body>
