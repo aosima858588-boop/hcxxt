@@ -100,7 +100,7 @@
 
     .result{
       margin-top:8px;
-      background:#0f1724; /* dark panel for result */
+      background:#0f1724;
       color:#e6eef8;
       padding:16px;
       border-radius:8px;
@@ -133,7 +133,7 @@
   <div class="wrap">
     <div class="card" role="main" aria-labelledby="title">
       <h1 id="title">查询接口</h1>
-      <p class="lead">在下面输入查询文本，点击“查询”来调用后端 /query 接口并显示结果。</p>
+      <p class="lead">在下面输入查询文本，点击“查询”来调用后端接口并显示结果。</p>
 
       <div class="controls">
         <div class="input">
@@ -143,7 +143,7 @@
       </div>
 
       <div class="info-row">
-        <div class="muted">使用 POST /query，Body: {"query":"..."} </div>
+        <div class="muted">POST 地址： http://localhost:5000/query &nbsp; Body: {"query":"..."} </div>
         <div style="flex:1"></div>
         <div id="status" class="muted" aria-live="polite"></div>
       </div>
@@ -159,17 +159,17 @@
       const resultEl = document.getElementById('result');
       const statusEl = document.getElementById('status');
 
+      const ENDPOINT = 'http://localhost:5000/query'; // 指定后端地址
+
       function setStatus(text){
         statusEl.textContent = text || '';
       }
 
       function renderResult(data){
-        // 如果后端返回的是 JSON，我们直接格式化显示
         try{
           const pretty = JSON.stringify(data, null, 2);
           resultEl.textContent = pretty;
         }catch(e){
-          // 兜底：显示原始字符串
           resultEl.textContent = String(data);
         }
       }
@@ -196,11 +196,15 @@
 
         btn.disabled = true;
         setStatus('查询中...');
-        resultEl.textContent = ''; // 清空
+        resultEl.textContent = ''; // 清空显示区
+
         try{
-          const resp = await fetch('/query', {
+          const resp = await fetch(ENDPOINT, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            // 将输入放入 JSON body 中
             body: JSON.stringify({ query: q })
           });
 
@@ -213,39 +217,39 @@
           }
 
           if (!resp.ok) {
-            // 如果后端返回了错误结构（例如 {error:..., detail:...}），尽量展示
-            if (typeof payload === 'object') {
-              renderError(payload.error || JSON.stringify(payload));
+            // 非 2xx，尽量显示后端返回的错误信息
+            if (typeof payload === 'object' && payload !== null) {
+              const msg = payload.error || payload.detail || JSON.stringify(payload);
+              renderError(msg);
             } else {
               renderError(payload || ('HTTP ' + resp.status));
             }
+            setStatus('错误');
           } else {
-            // 成功：显示完整返回内容，便于查看结构
             renderResult(payload);
             setStatus('完成');
           }
         } catch (err) {
-          renderError('网络或服务器错误：' + (err.message || err));
+          // 网络错误或跨域问题等
+          renderError('网络或服务器错误：' + (err && err.message ? err.message : String(err)));
+          setStatus('网络错误');
         } finally {
           btn.disabled = false;
           setTimeout(()=>setStatus(''), 2500);
         }
       }
 
-      // 按钮事件
       btn.addEventListener('click', doQuery);
 
-      // 回车提交
+      // 回车触发查询
       input.addEventListener('keydown', function(e){
         if(e.key === 'Enter'){
           doQuery();
         }
       });
 
-      // 初始聚焦
+      // 页面加载时的提示
       input.focus();
-      // 可选：预填示例
-      // input.value = '示例查询文本';
       resultEl.textContent = '请输入查询内容并点击上方“查询”按钮。';
     })();
   </script>
