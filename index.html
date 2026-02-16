@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>查询页面</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --primary:#2b6cb0;
+      --muted:#6b7280;
+      --danger:#e53e3e;
+      --radius:10px;
+      --shadow: 0 6px 20px rgba(27,40,56,0.08);
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background:linear-gradient(180deg,var(--bg),#eef4fb);
+      color:#102a43;
+    }
+    .wrap{
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:40px 16px;
+      box-sizing:border-box;
+    }
+    .card{
+      width:100%;
+      max-width:760px;
+      background:var(--card);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:28px;
+      box-sizing:border-box;
+    }
+    h1{
+      margin:0 0 8px 0;
+      font-size:20px;
+      letter-spacing:0.2px;
+    }
+    p.lead{
+      margin:0 0 18px 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .controls{
+      display:flex;
+      gap:12px;
+      margin-bottom:16px;
+      align-items:center;
+    }
+    .controls .input{
+      flex:1;
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    input[type="text"]{
+      width:100%;
+      padding:12px 14px;
+      border-radius:8px;
+      border:1px solid #e6eef8;
+      background:linear-gradient(180deg,#fff,#fbfdff);
+      box-shadow:inset 0 1px 0 rgba(16,42,67,0.02);
+      font-size:14px;
+      outline:none;
+      transition:box-shadow 0.12s, border-color 0.12s;
+    }
+    input[type="text"]:focus{
+      border-color: rgba(43,108,176,0.9);
+      box-shadow:0 4px 18px rgba(43,108,176,0.08);
+    }
+    button{
+      background:var(--primary);
+      color:#fff;
+      border:none;
+      padding:10px 14px;
+      font-size:14px;
+      border-radius:8px;
+      cursor:pointer;
+      transition:transform .08s ease, opacity .08s;
+    }
+    button:active{ transform:translateY(1px); }
+    button[disabled]{ opacity:0.6; cursor:default; }
+
+    .info-row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-bottom:12px;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .result{
+      margin-top:8px;
+      background:#0f1724; /* dark panel for result */
+      color:#e6eef8;
+      padding:16px;
+      border-radius:8px;
+      font-family: "SFMono-Regular", Menlo, Monaco, "Roboto Mono", "Noto Sans Mono", monospace;
+      font-size:13px;
+      line-height:1.4;
+      max-height:380px;
+      overflow:auto;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+
+    .error{
+      color:var(--danger);
+      font-weight:600;
+    }
+
+    .muted{
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    @media (max-width:520px){
+      .controls{ flex-direction:column; align-items:stretch; }
+      button{ width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="main" aria-labelledby="title">
+      <h1 id="title">查询接口</h1>
+      <p class="lead">在下面输入查询文本，点击“查询”来调用后端 /query 接口并显示结果。</p>
+
+      <div class="controls">
+        <div class="input">
+          <input id="queryInput" type="text" placeholder="请输入查询内容（例如：你好）" aria-label="查询文本" />
+        </div>
+        <button id="queryBtn">查询</button>
+      </div>
+
+      <div class="info-row">
+        <div class="muted">使用 POST /query，Body: {"query":"..."} </div>
+        <div style="flex:1"></div>
+        <div id="status" class="muted" aria-live="polite"></div>
+      </div>
+
+      <div id="result" class="result" aria-live="polite">等待查询...</div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const input = document.getElementById('queryInput');
+      const btn = document.getElementById('queryBtn');
+      const resultEl = document.getElementById('result');
+      const statusEl = document.getElementById('status');
+
+      function setStatus(text){
+        statusEl.textContent = text || '';
+      }
+
+      function renderResult(data){
+        // 如果后端返回的是 JSON，我们直接格式化显示
+        try{
+          const pretty = JSON.stringify(data, null, 2);
+          resultEl.textContent = pretty;
+        }catch(e){
+          // 兜底：显示原始字符串
+          resultEl.textContent = String(data);
+        }
+      }
+
+      function renderError(msg){
+        resultEl.innerHTML = '<span class="error">错误：</span> ' + escapeHtml(msg);
+      }
+
+      function escapeHtml(s){
+        return String(s)
+          .replace(/&/g,'&amp;')
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;')
+          .replace(/'/g,'&#39;');
+      }
+
+      async function doQuery(){
+        const q = input.value.trim();
+        if(!q){
+          renderError('查询内容不能为空');
+          return;
+        }
+
+        btn.disabled = true;
+        setStatus('查询中...');
+        resultEl.textContent = ''; // 清空
+        try{
+          const resp = await fetch('/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: q })
+          });
+
+          const ct = resp.headers.get('content-type') || '';
+          let payload;
+          if (ct.includes('application/json')) {
+            payload = await resp.json();
+          } else {
+            payload = await resp.text();
+          }
+
+          if (!resp.ok) {
+            // 如果后端返回了错误结构（例如 {error:..., detail:...}），尽量展示
+            if (typeof payload === 'object') {
+              renderError(payload.error || JSON.stringify(payload));
+            } else {
+              renderError(payload || ('HTTP ' + resp.status));
+            }
+          } else {
+            // 成功：显示完整返回内容，便于查看结构
+            renderResult(payload);
+            setStatus('完成');
+          }
+        } catch (err) {
+          renderError('网络或服务器错误：' + (err.message || err));
+        } finally {
+          btn.disabled = false;
+          setTimeout(()=>setStatus(''), 2500);
+        }
+      }
+
+      // 按钮事件
+      btn.addEventListener('click', doQuery);
+
+      // 回车提交
+      input.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){
+          doQuery();
+        }
+      });
+
+      // 初始聚焦
+      input.focus();
+      // 可选：预填示例
+      // input.value = '示例查询文本';
+      resultEl.textContent = '请输入查询内容并点击上方“查询”按钮。';
+    })();
+  </script>
+</body>
+</html>
