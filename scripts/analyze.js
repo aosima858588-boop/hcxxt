@@ -55,7 +55,7 @@ function summarize(allRecords) {
 
   for (const rec of allRecords) {
     const product = rec['产品名称'] || rec['产品'] || 'unknown';
-    const amount = parseAmount(rec['购买金额'] || rec['认购额度'] || rec['购买金额']);
+    const amount = parseAmount(rec['购买金额'] || rec['认购额度']);
     const user = rec['用户'] || rec['会员ID'] || 'unknown';
     const endRaw = rec['结束时间'] || rec['结束'] || null;
     const endDate = parseDateGuess(endRaw);

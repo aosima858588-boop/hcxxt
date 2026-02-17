@@ -10,8 +10,12 @@ export default function RefundOverview(){
     fetch('/api/overview').then(r=>r.json()).then(setOverview);
   },[]);
 
-  function onQuery(){
-    fetch(`/api/user?phone=${phone}`).then(r=>r.json()).then(setUser).catch(()=>setUser(null));
+  function queryUser(phoneNumber){
+    if (!phoneNumber) return;
+    fetch(`/api/user?phone=${phoneNumber}`)
+      .then(r=>r.json())
+      .then(setUser)
+      .catch(()=>setUser(null));
   }
 
   const columns = [
@@ -37,7 +41,7 @@ export default function RefundOverview(){
       )}
 
       <div style={{marginTop:20}}>
-        <Input.Search placeholder="手机号" enterButton="查询" onSearch={(v)=>{setPhone(v); fetch(`/api/user?phone=${v}`).then(r=>r.json()).then(setUser).catch(()=>setUser(null))}} />
+        <Input.Search placeholder="手机号" enterButton="查询" onSearch={(v)=>{setPhone(v); queryUser(v);}} />
       </div>
 
       {user && (

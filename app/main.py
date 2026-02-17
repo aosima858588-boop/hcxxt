@@ -50,8 +50,8 @@ def overview():
     total = session.exec(select(func.sum(Purchase.amount))).one() or 0.0
     due_not_refunded = 0.0
     not_due_total = 0.0
-    from datetime import datetime
-    today = datetime.utcnow().date()
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).date()
     purchases = session.exec(select(Purchase)).all()
     for p in purchases:
         if p.end_date:
@@ -79,8 +79,8 @@ def get_user(phone: str):
     purchases = session.exec(select(Purchase).where(Purchase.user_id == user.id)).all()
     product_count = len(purchases)
     total_sub = sum([p.amount for p in purchases])
-    from datetime import datetime
-    today = datetime.utcnow().date()
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).date()
     due = 0.0
     not_due = 0.0
     products = []
