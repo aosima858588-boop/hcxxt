@@ -1,25 +1,160 @@
-# 数据统计脚本说明
+# hcxxt - 数据导入与退款查询系统
 
-用途
-- 对你提供的 data.js（包含 injData / usdt45Data / usdtFinanceData）做汇总统计与分析，生成前端所需的 overview、按产品统计、按用户聚合等。
+包含：离线统计脚本（Node.js）、后端 API（FastAPI + SQLite）、前端示例组件。
 
-如何使用
-1. 将你原始的 data.js 放在仓库根目录（或与脚本同级）。脚本默认读取 `../data.js`（脚本位于 scripts/），如果你把脚本放在仓库根请调整路径或把脚本移到仓库根并修改 `DATA_FILE`。
-2. 安装 node（建议 >=14）。
-3. 运行：
-   - 进入脚本目录并执行：
-     - node scripts/analyze.js
-   - 或查询某个用户（手机号或会员ID）：
-     - node scripts/analyze.js 13392776413
+## 快速开始（离线脚本）
 
-输出
-- 控制台会打印总体概览 JSON、按产品汇总表、Top 用户列表、以及（可选）单用户聚合详情。
+1. 放置 data.js 在仓库根目录（已提供）。
+2. 运行：
+   ```bash
+   node scripts/analyze.js
+   ```
+   或查询某用户：
+   ```bash
+   node scripts/analyze.js 13392776413
+   ```
 
-注意
-- 脚本会尝试解析多种日期格式（如 "2026/2/2 13:59"、"1月14日"），并默认把没有年份的日期视为 2026 年（可在脚本中修改 TODAY 或年份假设）。
-- 目前没有退款明细，`total_refunded` 默认为 0。如你有退款数据可以把退款表加入并调整脚本来计算已退款金额/到期已退款等。
-- 如需把脚本改为后端 API（FastAPI / Express），我可以把它封装为 /api/import（批量导入）与 /api/overview、/api/user 等接口并提交 PR。
+### 离线脚本功能
+- 读取仓库根目录的 data.js（包含 injData / usdt45Data / usdtFinanceData）
+- 输出总览统计（总认购额度、已返款总额、到期未返款、未到期总额）
+- 按产品汇总统计
+- Top 用户列表（按认购总额排序）
+- 支持命令行查询单个用户的详细信息
 
-下一步建议
-- 你希望我直接把该脚本提交到仓库并开一个 PR 吗？还是你希望我把分析结果（运行后的 JSON / top users）直接贴到这里（我需要实际运行脚本 — 需要你允许我在仓库运行或我把结果发给你运行后返回）？
-- 是否需要把脚本改为 HTTP API 供前端直接请求？
+## 快速开始（后端 API）
+
+### 1. 安装依赖
+
+创建虚拟环境并安装依赖：
+```bash
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# 或 venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+```
+
+### 2. 启动服务
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+服务将在 http://localhost:8000 启动
+
+### 3. API 端点
+
+#### 导入数据
+```bash
+POST /api/import-json
+Content-Type: application/json
+
+{
+  "injData": [...],
+  "usdt45Data": [...],
+  "usdtFinanceData": [...]
+}
+```
+
+示例：
+```bash
+curl -X POST http://localhost:8000/api/import-json \
+  -H "Content-Type: application/json" \
+  -d @data.json
+```
+
+#### 查询概览
+```bash
+GET /api/overview
+```
+
+示例：
+```bash
+curl http://localhost:8000/api/overview
+```
+
+返回：
+```json
+{
+  "total_subscribed": 123456.78,
+  "total_refunded": 0.0,
+  "due_not_refunded": 12345.67,
+  "not_due_total": 111111.11
+}
+```
+
+#### 查询用户
+```bash
+GET /api/user?phone=13392776413
+```
+
+示例：
+```bash
+curl http://localhost:8000/api/user?phone=13392776413
+```
+
+返回：
+```json
+{
+  "phone": "13392776413",
+  "address": "0x...",
+  "product_count": 5,
+  "total_subscribed": 5000.0,
+  "total_refunded": 0.0,
+  "due_not_refunded": 1000.0,
+  "not_due_total": 4000.0,
+  "products": [...]
+}
+```
+
+## 前端示例
+
+frontend 目录包含 React + Ant Design 示例组件，演示如何调用 API 接口并渲染退款查询界面。
+
+文件：`frontend/src/components/RefundOverview.jsx`
+
+### 功能特性
+- 显示总体概览（卡片展示）
+- 支持手机号搜索用户
+- 展示用户详细信息（产品数量、累计认购、到期未返款等）
+- 表格展示用户购买的所有产品
+
+## 数据模型
+
+### User（用户）
+- phone: 手机号（唯一索引）
+- address: 地址
+- name: 姓名
+- created_at: 创建时间
+
+### Purchase（购买记录）
+- user_id: 用户ID（外键）
+- product_name: 产品名称
+- amount: 购买金额
+- start_date: 开始时间
+- end_date: 结束时间
+- daily_return: 每日应返
+- status: 状态
+- extra: 额外信息
+- created_at: 创建时间
+
+## 技术栈
+
+### 后端
+- FastAPI - 现代高性能 Web 框架
+- SQLModel - SQL 数据库的 Python ORM
+- SQLite - 轻量级数据库
+- Pydantic - 数据验证
+
+### 前端
+- React - UI 库
+- Ant Design - UI 组件库
+
+### 离线脚本
+- Node.js - JavaScript 运行时
+
+## 注意事项
+
+- 脚本会尝试解析多种日期格式（如 "2026/2/2 13:59"、"1月14日"），并默认把没有年份的日期视为 2026 年。
+- 目前没有退款明细，`total_refunded` 默认为 0。如有退款数据可以扩展模型来记录。
+- 数据库文件 data.db 会在首次启动时自动创建。
+- 建议在生产环境使用 PostgreSQL 或 MySQL 替代 SQLite。
