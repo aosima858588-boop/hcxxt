@@ -2,6 +2,7 @@ import json
 from .database import get_session
 from .models import User, Purchase
 from pathlib import Path
+from sqlmodel import select
 
 # Note: We'll provide a simple loader that can load data.js similarly to the Node script
 # but in practice we'll accept CSV/JSON upload via /api/import. For now include a helper to load data.js
@@ -22,7 +23,7 @@ def import_from_dicts(dicts):
         status = rec.get('状态')
         extra = rec.get('额外')
 
-        user = session.query(User).filter_by(phone=phone).first()
+        user = session.exec(select(User).where(User.phone == phone)).first()
         if not user:
             user = User(phone=phone, address=address)
             session.add(user)

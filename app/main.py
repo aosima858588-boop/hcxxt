@@ -3,11 +3,35 @@ from .database import init_db, get_session
 from .models import User, Purchase
 from .schemas import UserOut
 from typing import List
+from sqlmodel import select
 from sqlalchemy import func
 import csv, io, json
+import re
 
 app = FastAPI(title="退款查询系统 API")
 init_db()
+
+def parse_date_string(date_str):
+    """Parse various date formats to datetime object"""
+    if not date_str:
+        return None
+    try:
+        from datetime import datetime
+        # Try ISO format first
+        if '/' in date_str or '-' in date_str:
+            # Handle formats like "2026/2/2 13:59" or "2026-02-02"
+            return datetime.fromisoformat(date_str.replace('/', '-').split()[0])
+        
+        # Handle Chinese format like "1月14日"
+        match = re.match(r'(\d{1,2})月(\d{1,2})日', date_str)
+        if match:
+            month = int(match.group(1))
+            day = int(match.group(2))
+            # Assume year 2026 for dates without year
+            return datetime(2026, month, day)
+    except:
+        pass
+    return None
 
 @app.post('/api/import-json')
 async def import_json(payload: dict):
@@ -23,21 +47,18 @@ async def import_json(payload: dict):
 @app.get('/api/overview')
 def overview():
     session = get_session()
-    total = session.query(func.sum(Purchase.amount)).scalar() or 0.0
+    total = session.exec(select(func.sum(Purchase.amount))).one() or 0.0
     due_not_refunded = 0.0
     not_due_total = 0.0
     from datetime import datetime
     today = datetime.utcnow().date()
-    purchases = session.query(Purchase).all()
+    purchases = session.exec(select(Purchase)).all()
     for p in purchases:
         if p.end_date:
-            try:
-                end = datetime.fromisoformat(p.end_date)
-                if end.date() <= today:
-                    due_not_refunded += p.amount
-                else:
-                    not_due_total += p.amount
-            except:
+            end_date = parse_date_string(p.end_date)
+            if end_date and end_date.date() <= today:
+                due_not_refunded += p.amount
+            else:
                 not_due_total += p.amount
         else:
             not_due_total += p.amount
@@ -52,10 +73,10 @@ def overview():
 @app.get('/api/user')
 def get_user(phone: str):
     session = get_session()
-    user = session.query(User).filter_by(phone=phone).first()
+    user = session.exec(select(User).where(User.phone == phone)).first()
     if not user:
         raise HTTPException(status_code=404, detail='user not found')
-    purchases = session.query(Purchase).filter_by(user_id=user.id).all()
+    purchases = session.exec(select(Purchase).where(Purchase.user_id == user.id)).all()
     product_count = len(purchases)
     total_sub = sum([p.amount for p in purchases])
     from datetime import datetime
@@ -74,13 +95,10 @@ def get_user(phone: str):
             'extra': p.extra
         })
         if p.end_date:
-            try:
-                end = datetime.fromisoformat(p.end_date).date()
-                if end <= today:
-                    due += p.amount
-                else:
-                    not_due += p.amount
-            except:
+            end_date = parse_date_string(p.end_date)
+            if end_date and end_date.date() <= today:
+                due += p.amount
+            else:
                 not_due += p.amount
         else:
             not_due += p.amount
@@ -95,3 +113,4 @@ def get_user(phone: str):
         'not_due_total': round(not_due,2),
         'products': products
     }
+
